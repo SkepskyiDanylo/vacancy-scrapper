@@ -7,6 +7,7 @@ class VacancyItem(scrapy.Item):
     city = scrapy.Field()
     region = scrapy.Field()
     country = scrapy.Field()
+    location = scrapy.Field()
     skills = scrapy.Field()
     experience = scrapy.Field()
     description = scrapy.Field()
