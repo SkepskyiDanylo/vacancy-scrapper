@@ -3,6 +3,7 @@
 **Vacancy-Scraper** is a tool for automatic job data collection and analysis from LinkedIn website.  
 The project uses **Scrapy**, **Selenium**, and **OpenAI API** to extract vacancy data, 
 and **Pandas**, **MatPlotLib** and **NumPy** to transform and analyse the data.
+If you want to use your account via selenium, firstly contact the company by this email: `whitelist-crawl@linkedin.com` to get a permisson.
 
 ---
 
