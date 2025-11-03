@@ -4,9 +4,7 @@ import scrapy
 class VacancyItem(scrapy.Item):
     company_name = scrapy.Field()
     position = scrapy.Field()
-    city = scrapy.Field()
-    region = scrapy.Field()
-    country = scrapy.Field()
+    vacancy_location = scrapy.Field()
     location = scrapy.Field()
     skills = scrapy.Field()
     experience = scrapy.Field()

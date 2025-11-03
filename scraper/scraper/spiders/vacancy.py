@@ -1,4 +1,5 @@
 import datetime
+import os
 from typing import Any, AsyncGenerator, Generator
 
 import scrapy
@@ -11,7 +12,7 @@ from scrapy.utils.log import logger
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from scraper.items import VacancyItem
-from scraper.settings import EMAIL, PASSWORD
+from scraper.settings import EMAIL, PASSWORD, RAW_DATA_FOLDER
 import urllib.parse
 
 
@@ -26,9 +27,15 @@ class VacancySpider(scrapy.Spider):
         Automatic save in csv file to the data directory.
         """
         spider = super().from_crawler(crawler, *args, **kwargs)
-        region = kwargs.get("location", "Germany").lower()
-        role = kwargs.get("keywords", "Python").lower()
-        filename = f"../../data/{region}_{role}_vacancies_{datetime.datetime.now():%Y-%m-%d_%H-%M}.csv"
+
+        region = kwargs.get("location", "Germany").lower().replace(" ", "_").strip()
+        role = kwargs.get("keywords", "Python").lower().replace(" ", "_").strip()
+
+        filename = (
+            RAW_DATA_FOLDER
+            / f"{region}_{role}_vacancies_{datetime.datetime.now():%Y-%m-%d_%H-%M}.csv"
+        )
+
         crawler.settings.set(
             "FEEDS",
             {
@@ -48,8 +55,8 @@ class VacancySpider(scrapy.Spider):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        self.keywords = keywords.lower()
-        self.location = location.lower()
+        self.keywords = keywords.strip()
+        self.location = location.strip()
 
         self.count = 0
         # Time Posted Range, adjust if needed
@@ -75,7 +82,7 @@ class VacancySpider(scrapy.Spider):
         options.add_argument("--disable-gpu")
         options.add_argument("--disable-extensions")
         options.add_argument("--no-sandbox")
-        options.add_argument("--headless")
+        # options.add_argument("--headless")
         options.add_argument(
             "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36"
         )
@@ -110,7 +117,12 @@ class VacancySpider(scrapy.Spider):
             yield scrapy.Request(url=full_url, callback=self.parse)
 
     def parse_skills_selenium(self, url: str) -> list[str | None]:
-        self.logger.info("Start parsing skills via selenium")
+        if not self.selenium_status:
+            self.logger.info("Selenium is unavailable.")
+            return []
+
+        self.logger.info("Start parsing skills via selenium.")
+
         try:
             driver = self.driver
             driver.get(url)
@@ -118,9 +130,6 @@ class VacancySpider(scrapy.Spider):
             button = driver.find_element(
                 By.CSS_SELECTOR, 'button svg[data-test-icon="skills-small"]'
             )
-
-            if not button:
-                return []
 
             parent_button = button.find_element(By.XPATH, "./ancestor::button")
             parent_button.click()
@@ -138,7 +147,7 @@ class VacancySpider(scrapy.Spider):
             skills = [skill.text.strip() for skill in skills if skill.text]
             return skills
         except WebDriverException as e:
-            logger.warning(f"Parse skills via selenium: {e}")
+            logger.warning(f"Error while parsing skills via selenium: {e}")
         return []
 
     def parse_detail(
@@ -155,11 +164,8 @@ class VacancySpider(scrapy.Spider):
             [part.strip() for part in description_parts if part.strip()]
         )
 
-        skills = []
-        skills_button = response.css('button svg[data-test-icon="skills-small"]')
-        if skills_button and self.selenium_status:
-            skills = self.parse_skills_selenium(response.url)
-
+        skills = self.parse_skills_selenium(response.url)
+        self.count += 1
         yield VacancyItem(
             description=description_text,
             skills=skills,
@@ -196,16 +202,7 @@ class VacancySpider(scrapy.Spider):
                 .strip()
             )
 
-            city, region, country = None, None, None
-
-            if location:
-                parts = [p.strip().replace("None", "N/A") for p in location.split(",")]
-                if len(parts) == 3:
-                    city, region, country = parts
-                elif len(parts) == 2:
-                    city, country = parts
-                elif len(parts) == 1:
-                    country = parts[0]
+            location = location.replace("None", "").strip(", ")
 
             yield scrapy.Request(
                 url=vacancy_link,
@@ -213,12 +210,9 @@ class VacancySpider(scrapy.Spider):
                 cb_kwargs={
                     "company_name": company_name,
                     "position": position,
-                    "city": city,
-                    "region": region,
-                    "country": country,
+                    "vacancy_location": location,
                     "location": self.location,
                     "company_url": company_url,
                     "vacancy_link": vacancy_link,
                 },
             )
-        self.count += 25
